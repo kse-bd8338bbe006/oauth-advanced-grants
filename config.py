@@ -22,8 +22,10 @@ OIDC = f"{KC_BASE}/realms/{REALM}/protocol/openid-connect"
 TOKEN_URL = f"{OIDC}/token"
 INTROSPECT_URL = f"{OIDC}/token/introspect"
 REVOKE_URL = f"{OIDC}/revoke"
+LOGOUT_URL = f"{OIDC}/logout"
 DEVICE_URL = f"{OIDC}/auth/device"
 AUTH_URL = f"{OIDC}/auth"
+JWKS_URL = f"{OIDC}/certs"
 REGISTRATION_URL = f"{KC_BASE}/realms/{REALM}/clients-registrations/openid-connect"
 ADMIN_BASE = f"{KC_BASE}/admin/realms/{REALM}"
 
@@ -33,6 +35,20 @@ RESOURCE_CLIENT = os.environ.get("RESOURCE_CLIENT", "documents-api")
 RESOURCE_SECRET = os.environ.get("RESOURCE_SECRET", "documents-api-secret-lab-2026")
 DEVICE_CLIENT = os.environ.get("DEVICE_CLIENT", "device-cli")
 NATIVE_CLIENT = os.environ.get("NATIVE_CLIENT", "native-app-demo")
+
+# Backchannel-logout demo client (confidential, direct access grants + a
+# backchannel logout URL Keycloak can POST a logout token to).
+BCL_CLIENT = os.environ.get("BCL_CLIENT", "bcl-demo")
+BCL_SECRET = os.environ.get("BCL_SECRET", "bcl-demo-secret-lab-2026")
+# Keycloak runs in-cluster; from a cluster node the laptop host is 192.168.50.1.
+# This is where the bcl-listen receiver must be reachable.
+BCL_URL = os.environ.get("BCL_URL", "http://192.168.50.1:9000/backchannel")
+
+# Known confidential client secrets (for commands that authenticate a client).
+CLIENT_SECRETS = {
+    RESOURCE_CLIENT: RESOURCE_SECRET,
+    BCL_CLIENT: BCL_SECRET,
+}
 
 DEMO_USER = os.environ.get("DEMO_USER", "alice")
 DEMO_PASS = os.environ.get("DEMO_PASS", "alice")

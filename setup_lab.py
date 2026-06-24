@@ -86,6 +86,32 @@ def ensure_public_client(s, at, client_id, name, attributes=None,
         print(f"  + {client_id}: created")
 
 
+def ensure_bcl_client(s, at):
+    """Confidential client for the backchannel-logout demo: direct access grants
+    (so a session can be created from the CLI) + a backchannel logout URL that
+    Keycloak POSTs a logout token to."""
+    cl = get_client(s, at, c.BCL_CLIENT)
+    hdr = {"Authorization": f"Bearer {at}"}
+    body = {
+        "clientId": c.BCL_CLIENT, "name": "Backchannel-logout demo (Lecture 7)",
+        "enabled": True, "publicClient": False, "secret": c.BCL_SECRET,
+        "standardFlowEnabled": False, "directAccessGrantsEnabled": True,
+        "serviceAccountsEnabled": False,
+        "attributes": {
+            "backchannel.logout.url": c.BCL_URL,
+            "backchannel.logout.session.required": "true",
+            "backchannel.logout.revoke.offline.tokens": "false",
+        },
+    }
+    if cl:
+        body["id"] = cl["id"]
+        s.put(f"{c.ADMIN_BASE}/clients/{cl['id']}", json=body, headers=hdr).raise_for_status()
+        print(f"  = {c.BCL_CLIENT}: updated (backchannel URL -> {c.BCL_URL})")
+    else:
+        s.post(f"{c.ADMIN_BASE}/clients", json=body, headers=hdr).raise_for_status()
+        print(f"  + {c.BCL_CLIENT}: created (backchannel URL -> {c.BCL_URL})")
+
+
 def main():
     c.require_lab()
     s = c.session()
@@ -99,7 +125,8 @@ def main():
                          standard_flow=True,
                          redirect_uris=["http://127.0.0.1:*/callback",
                                         "http://localhost:*/callback"])
-    print("\nDone. You can now run the demo scripts.")
+    ensure_bcl_client(s, at)
+    print("\nDone. You can now run the demo scripts and kc_cli.py.")
 
 
 if __name__ == "__main__":

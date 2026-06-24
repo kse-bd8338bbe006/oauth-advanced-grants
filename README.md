@@ -13,6 +13,44 @@ every claim on the deck is reproduced here against the live lab.
 | `dynamic_registration_demo.py` | 7591 / 7592 | protected registration, initial access token, manage + delete the client |
 | `native_app_pkce_demo.py` | 8252 | Authorization Code + PKCE over a loopback redirect (no client secret) |
 | `device_flow_demo.py` | 8628 | device + user codes, polling, `slow_down`, tokens |
+| `kc_cli.py` | 7662 / 7009 / 8693 + OIDC logout | one CLI: `introspect`, `exchange`, `revoke`, `logout`, `bcl-listen` |
+
+## The CLI (`kc_cli.py`)
+
+A single tool that exercises four Keycloak features. `login` caches tokens in
+`~/.kc_cli_tokens.json`; the other commands reuse them.
+
+```bash
+python kc_cli.py login            # alice via spa-token-demo (public client)
+python kc_cli.py introspect       # RFC 7662 - is the token active at the issuer?
+python kc_cli.py exchange         # RFC 8693 - documents-api exchanges the token
+python kc_cli.py revoke           # RFC 7009 - revoke the refresh token (owning client)
+```
+
+### Back-channel logout (two terminals)
+
+OIDC back-channel logout is server-to-server: Keycloak POSTs a signed **Logout
+Token** to a client's registered URL when the session ends. A client is never
+notified of a logout it started itself, so use an admin-/elsewhere-initiated
+logout to see it.
+
+```bash
+# terminal 1 - the receiver (validates the logout token's signature + claims)
+python kc_cli.py bcl-listen --port 9000
+
+# terminal 2 - create a session for a client that has a backchannel URL, then
+# end the session from "elsewhere" (admin)
+python kc_cli.py login --client bcl-demo
+python kc_cli.py logout --admin
+```
+
+Terminal 1 prints the validated Logout Token (issuer, `aud`, `sid`, the
+backchannel-logout event, signature VALID).
+
+> The receiver must be reachable **from Keycloak**. In the lab, Keycloak runs
+> in-cluster and the laptop host is `192.168.50.1`, so `setup_lab.py` registers
+> `bcl-demo`'s backchannel URL as `http://192.168.50.1:9000/backchannel`.
+> Override with `BCL_URL` if your topology differs.
 
 ## Lab facts (verified against Keycloak 26.3.3, realm `api-security`)
 
@@ -46,8 +84,9 @@ demos need on top of the Lecture 6 realm:
 - enables Standard Token Exchange on `documents-api`
 - adds an audience mapper so `spa-token-demo` tokens list `documents-api` in `aud`
   (the requester must be in the subject token's audience to exchange it)
-- creates `device-cli` (public, device grant) and `native-app-demo` (public, code
-  + PKCE, loopback redirect)
+- creates `device-cli` (public, device grant), `native-app-demo` (public, code
+  + PKCE, loopback redirect), and `bcl-demo` (confidential, direct access grants
+  + a back-channel logout URL)
 
 ## Run
 
