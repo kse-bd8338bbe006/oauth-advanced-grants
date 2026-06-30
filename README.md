@@ -13,6 +13,7 @@ every claim on the deck is reproduced here against the live lab.
 | `dynamic_registration_demo.py` | 7591 / 7592 | protected registration, initial access token, manage + delete the client |
 | `native_app_pkce_demo.py` | 8252 | Authorization Code + PKCE over a loopback redirect (no client secret) |
 | `device_flow_demo.py` | 8628 | device + user codes, polling, `slow_down`, tokens |
+| `dpop_demo.py` | 9449 | DPoP sender-constrained tokens (Lecture 8): `cnf.jkt` equals our key's RFC 7638 thumbprint, Bearer vs DPoP, wrong-`htu` rejected |
 | `kc_cli.py` | 7662 / 7009 / 8693 + OIDC logout | one CLI: `introspect`, `exchange`, `revoke`, `logout`, `bcl-listen` |
 
 ## The CLI (`kc_cli.py`)
