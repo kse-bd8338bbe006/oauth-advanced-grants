@@ -5,12 +5,17 @@ DPoP - Demonstrating Proof-of-Possession (RFC 9449), live against the lab.
 Sender-constrained tokens are a Lecture 8 topic, but the mechanism is pure
 token-endpoint behaviour, so it lives here with the other grant/endpoint demos.
 
-What it proves, end to end, against the real Keycloak:
+What it proves, end to end, against the real Keycloak and the Lecture 8
+DPoP-protected resource server (dpop-rs):
   1. A token request carrying a DPoP proof returns token_type=DPoP and an access
      token whose cnf.jkt equals the RFC 7638 thumbprint of OUR public key.
   2. The SAME client without a DPoP header returns a plain Bearer token (no cnf)
      - DPoP is exactly what turns a bearer token into a sender-constrained one.
   3. A DPoP proof with the wrong htu is rejected (invalid_request, URL mismatch).
+  4. USING the bound token at the resource server: a valid resource proof (htm,
+     htu, ath) is accepted (200); a stolen token replayed with the ATTACKER'S key
+     is rejected (key-mismatch); reusing a proof is rejected (replay). This is the
+     whole point of DPoP - stealing the token alone buys the attacker nothing.
 
 The ES256 proof JWT is built by hand (no PyJWT) so every field is visible.
 Reuses the confidential client `documents-api` via client_credentials.
@@ -103,6 +108,18 @@ def request_token(s, offset, priv=None, jwk=None, htu=C.TOKEN_URL):
     return r.status_code, body
 
 
+def ath_of(access_token: str) -> str:
+    """RFC 9449 ath: base64url(SHA-256(access token)) - binds the proof to THIS token."""
+    return b64url(hashlib.sha256(access_token.encode()).digest())
+
+
+def call_resource(s, access_token, proof):
+    """Call the DPoP-protected RS: token as `Authorization: DPoP`, proof in `DPoP`."""
+    r = s.get(C.DPOP_RS_URL,
+              headers={"Authorization": f"DPoP {access_token}", "DPoP": proof})
+    return r.status_code, (r.json() if r.text else {})
+
+
 def main():
     C.require_lab()
     C.banner("DPoP (RFC 9449) - sender-constrained tokens")
@@ -124,8 +141,9 @@ def main():
     if status != 200:
         print(f"   FAIL - HTTP {status}: {body}")
         sys.exit(1)
+    bound_token = body["access_token"]  # DPoP-bound; reused to call the RS in [4]
     ttype = body.get("token_type", "")
-    cnf = C.decode_jwt(body["access_token"]).get("cnf", {})
+    cnf = C.decode_jwt(bound_token).get("cnf", {})
     print(f"   token_type = {ttype}")
     print(f"   access_token cnf.jkt = {cnf.get('jkt')}")
     ok = ttype.lower() == "dpop" and cnf.get("jkt") == our_jkt
@@ -148,6 +166,42 @@ def main():
     print(f"   HTTP {status}  error = {err}  ({desc})")
     print(f"   {'PASS' if ok else 'FAIL'}: KC rejects a proof whose htu does not match")
     passed &= ok
+
+    print(f"\n[4] USE the bound token at the resource server ({C.DPOP_RS_URL})")
+    try:
+        # (a) the legitimate holder: bound token + a proof for THIS request+token
+        good_proof = make_dpop_proof(priv, jwk, "GET", C.DPOP_RS_URL,
+                                     iat=int(time.time()) - offset, ath=ath_of(bound_token))
+        status, body = call_resource(s, bound_token, good_proof)
+        ok = status == 200
+        print(f"   (a) holder + valid proof         -> HTTP {status}  "
+              f"{body.get('message', body.get('failed_check', body))}")
+        print(f"       {'PASS' if ok else 'FAIL'}: the RS accepts the bound token")
+        passed &= ok
+
+        # (b) token theft: attacker has the token but NOT the private key, so they
+        #     sign the proof with their own key. thumbprint(jwk) != cnf.jkt -> rejected.
+        thief = ec.generate_private_key(ec.SECP256R1())
+        thief_jwk = public_jwk(thief.public_key())
+        thief_proof = make_dpop_proof(thief, thief_jwk, "GET", C.DPOP_RS_URL,
+                                      iat=int(time.time()) - offset, ath=ath_of(bound_token))
+        status, body = call_resource(s, bound_token, thief_proof)
+        ok = status == 401 and body.get("failed_check") == "key-mismatch"
+        print(f"   (b) stolen token + attacker key  -> HTTP {status}  "
+              f"failed_check={body.get('failed_check')}")
+        print(f"       {'PASS' if ok else 'FAIL'}: theft is useless without the bound key")
+        passed &= ok
+
+        # (c) replay: resend the exact proof from (a). Same jti -> rejected.
+        status, body = call_resource(s, bound_token, good_proof)
+        ok = status == 401 and body.get("failed_check") == "replay"
+        print(f"   (c) replayed proof (same jti)    -> HTTP {status}  "
+              f"failed_check={body.get('failed_check')}")
+        print(f"       {'PASS' if ok else 'FAIL'}: each proof is single-use")
+        passed &= ok
+    except C.requests.exceptions.RequestException as e:
+        print(f"   SKIP - resource server unreachable at {C.DPOP_RS_URL}: {e}")
+        print("       (deploy dpop-rs or set DPOP_RS_URL; token-endpoint checks above still count)")
 
     C.banner("ALL CHECKS PASSED" if passed else "SOME CHECKS FAILED")
     sys.exit(0 if passed else 1)

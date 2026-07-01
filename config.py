@@ -29,6 +29,10 @@ JWKS_URL = f"{OIDC}/certs"
 REGISTRATION_URL = f"{KC_BASE}/realms/{REALM}/clients-registrations/openid-connect"
 ADMIN_BASE = f"{KC_BASE}/admin/realms/{REALM}"
 
+# DPoP-protected resource server (Lecture 8) - the endpoint dpop_demo.py calls
+# with a bound token + resource proof. htu in the proof must equal this URL.
+DPOP_RS_URL = os.environ.get("DPOP_RS_URL", "https://dpop-rs.192.168.50.10.nip.io/api/resource")
+
 # --- clients and users (lab defaults) ---------------------------------------
 PUBLIC_CLIENT = os.environ.get("PUBLIC_CLIENT", "spa-token-demo")
 RESOURCE_CLIENT = os.environ.get("RESOURCE_CLIENT", "documents-api")
